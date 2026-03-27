@@ -22,6 +22,7 @@ df["Cod Cliente"] = df["Cod Cliente"].astype(str)
 
 # guardar estado de usuarios
 estado_usuario = {}
+datos_temporales = {}
 
 
 # =========================
@@ -32,6 +33,7 @@ def menu_principal():
     markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("📍 Datos del Cliente")
     markup.row("📄 Factura")
+    markup.row("📅 Factura por Cliente y Fecha")  # NUEVA OPCION
     return markup
 
 
@@ -53,28 +55,24 @@ def home():
 
 
 # =========================
-# BUSCAR PDF POR NUMERO FACTURA
+# BUSCAR PDF
 # =========================
 
 def buscar_paginas_pdf(numero_factura):
-
     paginas = []
 
     if not os.path.exists(PDF_FOLDER):
         return paginas
 
     for archivo in os.listdir(PDF_FOLDER):
-
         if archivo.lower().endswith(".pdf"):
 
             ruta = os.path.join(PDF_FOLDER, archivo)
 
             try:
-
                 doc = fitz.open(ruta)
 
                 for i in range(len(doc)):
-
                     texto = doc[i].get_text()
 
                     if numero_factura in texto:
@@ -88,17 +86,44 @@ def buscar_paginas_pdf(numero_factura):
     return paginas
 
 
-def crear_pdf_resultado(paginas, numero_factura):
+# 🔥 NUEVA BUSQUEDA POR CLIENTE + FECHA
+def buscar_por_cliente_fecha(codigo, fecha):
+    paginas = []
 
+    if not os.path.exists(PDF_FOLDER):
+        return paginas
+
+    for archivo in os.listdir(PDF_FOLDER):
+        if archivo.lower().endswith(".pdf"):
+
+            ruta = os.path.join(PDF_FOLDER, archivo)
+
+            try:
+                doc = fitz.open(ruta)
+
+                for i in range(len(doc)):
+                    texto = doc[i].get_text()
+
+                    if codigo in texto and fecha in texto:
+                        paginas.append((ruta, i))
+
+                doc.close()
+
+            except:
+                pass
+
+    return paginas
+
+
+def crear_pdf_resultado(paginas, nombre_base):
     nuevo = fitz.open()
 
     for ruta, pagina in paginas:
-
         doc = fitz.open(ruta)
         nuevo.insert_pdf(doc, from_page=pagina, to_page=pagina)
         doc.close()
 
-    nombre = f"factura_{numero_factura}.pdf"
+    nombre = f"{nombre_base}.pdf"
 
     nuevo.save(nombre)
     nuevo.close()
@@ -136,34 +161,98 @@ def manejar_mensaje(message):
 
 
     # =========================
-    # OPCION DATOS CLIENTE
+    # DATOS CLIENTE
     # =========================
 
     if texto == "📍 Datos del Cliente":
-
         estado_usuario[chat_id] = "esperando_codigo_datos"
 
-        bot.send_message(
-            chat_id,
-            "Ingrese el código del cliente:"
-        )
-
+        bot.send_message(chat_id, "Ingrese el código del cliente:")
         return
 
 
     # =========================
-    # OPCION FACTURA
+    # FACTURA POR NUMERO
     # =========================
 
     if texto == "📄 Factura":
-
         estado_usuario[chat_id] = "esperando_numero_factura"
 
         bot.send_message(
             chat_id,
             "Ingrese el número de factura:\nEjemplo: B101-117424"
         )
+        return
 
+
+    # =========================
+    # NUEVA OPCION CLIENTE + FECHA
+    # =========================
+
+    if texto == "📅 Factura por Cliente y Fecha":
+        estado_usuario[chat_id] = "esperando_codigo_cliente_factura"
+
+        bot.send_message(
+            chat_id,
+            "Ingrese el código del cliente:"
+        )
+        return
+
+
+    # =========================
+    # GUARDAR CODIGO Y PEDIR FECHA
+    # =========================
+
+    if estado_usuario.get(chat_id) == "esperando_codigo_cliente_factura":
+
+        datos_temporales[chat_id] = {"codigo": texto}
+
+        estado_usuario[chat_id] = "esperando_fecha_factura"
+
+        bot.send_message(
+            chat_id,
+            "Ahora ingrese la fecha de facturación:\nEjemplo: 2024-01-15"
+        )
+        return
+
+
+    # =========================
+    # PROCESAR CLIENTE + FECHA
+    # =========================
+
+    if estado_usuario.get(chat_id) == "esperando_fecha_factura":
+
+        fecha = texto
+        codigo = datos_temporales.get(chat_id, {}).get("codigo")
+
+        bot.send_message(chat_id, "🔍 Buscando factura...")
+
+        paginas = buscar_por_cliente_fecha(codigo, fecha)
+
+        if paginas:
+
+            nombre_archivo = f"factura_{codigo}_{fecha}"
+            archivo = crear_pdf_resultado(paginas, nombre_archivo)
+
+            with open(archivo, "rb") as f:
+                bot.send_document(
+                    chat_id,
+                    f,
+                    caption=f"📄 Factura\nCliente: {codigo}\nFecha: {fecha}"
+                )
+
+            os.remove(archivo)
+
+        else:
+            bot.send_message(
+                chat_id,
+                "❌ No se encontraron resultados con esos datos"
+            )
+
+        estado_usuario[chat_id] = None
+        datos_temporales.pop(chat_id, None)
+
+        volver_menu(chat_id)
         return
 
 
@@ -199,20 +288,15 @@ def manejar_mensaje(message):
                 pass
 
         else:
-
-            bot.send_message(
-                chat_id,
-                "❌ Código no encontrado"
-            )
+            bot.send_message(chat_id, "❌ Código no encontrado")
 
         estado_usuario[chat_id] = None
         volver_menu(chat_id)
-
         return
 
 
     # =========================
-    # PROCESAR FACTURA POR NUMERO
+    # FACTURA POR NUMERO
     # =========================
 
     if estado_usuario.get(chat_id) == "esperando_numero_factura":
@@ -225,7 +309,7 @@ def manejar_mensaje(message):
 
         if paginas:
 
-            archivo = crear_pdf_resultado(paginas, numero_factura)
+            archivo = crear_pdf_resultado(paginas, f"factura_{numero_factura}")
 
             with open(archivo, "rb") as f:
                 bot.send_document(
@@ -237,20 +321,15 @@ def manejar_mensaje(message):
             os.remove(archivo)
 
         else:
-
-            bot.send_message(
-                chat_id,
-                "❌ No se encontró esa factura"
-            )
+            bot.send_message(chat_id, "❌ No se encontró esa factura")
 
         estado_usuario[chat_id] = None
         volver_menu(chat_id)
-
         return
 
 
     # =========================
-    # SI NO SELECCIONO NADA
+    # DEFAULT
     # =========================
 
     bot.send_message(
