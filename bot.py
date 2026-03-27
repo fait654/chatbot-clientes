@@ -211,7 +211,7 @@ def manejar_mensaje(message):
 
         bot.send_message(
             chat_id,
-            "Ahora ingrese la fecha de facturación:\nEjemplo: 2024-01-15"
+            "Ahora ingrese la fecha de facturación:\nEjemplo: 15-01-2024"
         )
         return
 
