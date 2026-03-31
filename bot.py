@@ -181,7 +181,7 @@ def manejar_mensaje(message):
     # ESTADOS CLIENTE
     # =========================
 
-    if texto == "📊 Estados del Cliente":
+    if texto == "📊 Bot Prueba":
         estado_usuario[chat_id] = "esperando_clave_estados"
         bot.send_message(chat_id, "🔒 Ingrese la clave:")
         return
