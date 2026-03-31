@@ -61,7 +61,7 @@ def menu_principal():
     markup.row("📍 Datos del Cliente")
     markup.row("📄 Factura")
     markup.row("📅 Factura por Cliente y Fecha")
-    markup.row("📊 Bot Prueba (Estados)")
+    markup.row("📊 Bot Prueba")
     return markup
 
 
@@ -177,7 +177,7 @@ def manejar_mensaje(message):
     # BOT PRUEBA (ESTADOS)
     # =========================
 
-    if texto == "📊 Bot Prueba (Estados)":
+    if texto == "📊 Bot Prueba":
         estado_usuario[chat_id] = "clave"
         bot.send_message(chat_id, "🔒 Ingrese la clave:")
         return
