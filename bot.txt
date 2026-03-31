@@ -63,7 +63,7 @@ def menu_principal():
     markup.row("📍 Datos del Cliente")
     markup.row("📄 Factura")
     markup.row("📅 Factura por Cliente y Fecha")
-    markup.row("📊 Estados del Cliente")
+    markup.row("📊 bot pruebas")
     return markup
 
 
