@@ -21,7 +21,7 @@ PDF_FOLDER = "pdfs"
 # =========================
 
 df = pd.read_excel("clientes.xlsx")
-df["Cod Cliente"] = df["Cod Cliente"].astype(str)
+df["Cod Cliente"] = df["Cod Cliente"].astype(str).str.strip()
 
 # =========================
 # EXCEL ESTADOS
@@ -29,11 +29,9 @@ df["Cod Cliente"] = df["Cod Cliente"].astype(str)
 
 df_estados = pd.read_excel("estados.xlsx")
 
-# limpiar texto
 df_estados["VENDEDOR"] = df_estados["VENDEDOR"].astype(str).str.upper().str.strip()
 df_estados["ESTADO"] = df_estados["ESTADO"].astype(str).str.upper().str.strip()
 
-# limpiar monto
 df_estados["MONTO"] = (
     df_estados["MONTO"]
     .astype(str)
@@ -63,16 +61,12 @@ def menu_principal():
     markup.row("📍 Datos del Cliente")
     markup.row("📄 Factura")
     markup.row("📅 Factura por Cliente y Fecha")
-    markup.row("📊 bot pruebas")
+    markup.row("📊 Bot Prueba (Estados)")
     return markup
 
 
 def volver_menu(chat_id):
-    bot.send_message(
-        chat_id,
-        "\n¿Qué deseas consultar ahora?",
-        reply_markup=menu_principal()
-    )
+    bot.send_message(chat_id, "¿Qué deseas consultar ahora?", reply_markup=menu_principal())
 
 # =========================
 # FLASK
@@ -83,8 +77,37 @@ def home():
     return "Bot activo - BOT PRUEBA"
 
 # =========================
-# PDF FUNCIONES
+# FUNCIONES PDF
 # =========================
+
+def buscar_por_cliente_fecha(codigo, fecha):
+    paginas = []
+
+    codigo = str(codigo).strip()
+    fecha = str(fecha).strip()
+
+    if not os.path.exists(PDF_FOLDER):
+        return paginas
+
+    for archivo in os.listdir(PDF_FOLDER):
+        if archivo.lower().endswith(".pdf"):
+            ruta = os.path.join(PDF_FOLDER, archivo)
+
+            try:
+                doc = fitz.open(ruta)
+
+                for i in range(len(doc)):
+                    texto = doc[i].get_text()
+
+                    if codigo in texto and fecha in texto:
+                        paginas.append((ruta, i))
+
+                doc.close()
+            except:
+                pass
+
+    return paginas
+
 
 def buscar_paginas_pdf(numero_factura):
     paginas = []
@@ -112,33 +135,7 @@ def buscar_paginas_pdf(numero_factura):
     return paginas
 
 
-def buscar_por_cliente_fecha(codigo, fecha):
-    paginas = []
-
-    if not os.path.exists(PDF_FOLDER):
-        return paginas
-
-    for archivo in os.listdir(PDF_FOLDER):
-        if archivo.lower().endswith(".pdf"):
-            ruta = os.path.join(PDF_FOLDER, archivo)
-
-            try:
-                doc = fitz.open(ruta)
-
-                for i in range(len(doc)):
-                    texto = doc[i].get_text()
-
-                    if codigo in texto and fecha in texto:
-                        paginas.append((ruta, i))
-
-                doc.close()
-            except:
-                pass
-
-    return paginas
-
-
-def crear_pdf_resultado(paginas, nombre_base):
+def crear_pdf_resultado(paginas, nombre):
     nuevo = fitz.open()
 
     for ruta, pagina in paginas:
@@ -146,7 +143,6 @@ def crear_pdf_resultado(paginas, nombre_base):
         nuevo.insert_pdf(doc, from_page=pagina, to_page=pagina)
         doc.close()
 
-    nombre = f"{nombre_base}.pdf"
     nuevo.save(nombre)
     nuevo.close()
 
@@ -163,7 +159,7 @@ def start(message):
 
     bot.send_message(
         chat_id,
-        "🤖 BOT PRUEBA\n\nHola 👋 Bienvenido al sistema.\n\nSelecciona una opción:",
+        "🤖 BOT PRUEBA\n\nSelecciona una opción:",
         reply_markup=menu_principal()
     )
 
@@ -178,39 +174,36 @@ def manejar_mensaje(message):
     texto = message.text.strip()
 
     # =========================
-    # ESTADOS CLIENTE
+    # BOT PRUEBA (ESTADOS)
     # =========================
 
-    if texto == "📊 Bot Prueba":
-        estado_usuario[chat_id] = "esperando_clave_estados"
+    if texto == "📊 Bot Prueba (Estados)":
+        estado_usuario[chat_id] = "clave"
         bot.send_message(chat_id, "🔒 Ingrese la clave:")
         return
 
-    if estado_usuario.get(chat_id) == "esperando_clave_estados":
+    if estado_usuario.get(chat_id) == "clave":
 
         if texto == CLAVE:
-            estado_usuario[chat_id] = "esperando_nombre_estados"
-            bot.send_message(chat_id, "✅ Clave correcta\n\nIngrese nombre o apellido:")
+            estado_usuario[chat_id] = "nombre"
+            bot.send_message(chat_id, "Ingrese nombre o apellido:")
         else:
             bot.send_message(chat_id, "❌ Clave incorrecta")
             estado_usuario[chat_id] = None
             volver_menu(chat_id)
         return
 
-    if estado_usuario.get(chat_id) == "esperando_nombre_estados":
+    if estado_usuario.get(chat_id) == "nombre":
 
         nombre = texto.upper()
-
-        filtro = df_estados["VENDEDOR"].str.contains(nombre, na=False)
-        resultado = df_estados[filtro]
+        resultado = df_estados[df_estados["VENDEDOR"].str.contains(nombre, na=False)]
 
         if resultado.empty:
             bot.send_message(chat_id, "❌ No se encontraron resultados")
         else:
 
-            respuesta = "📊 RESULTADOS ENCONTRADOS\n\n"
+            respuesta = "📊 RESULTADOS\n\n"
 
-            # 🔥 AGRUPAR POR PERSONA
             for persona, grupo in resultado.groupby("VENDEDOR"):
 
                 cancelado = grupo[grupo["ESTADO"] == "CANCELADO"]["MONTO"].sum()
@@ -231,74 +224,97 @@ def manejar_mensaje(message):
         return
 
     # =========================
-    # DATOS CLIENTE
+    # FACTURA POR CLIENTE Y FECHA (ARREGLADO)
     # =========================
 
-    if texto == "📍 Datos del Cliente":
-        estado_usuario[chat_id] = "esperando_codigo_datos"
+    if texto == "📅 Factura por Cliente y Fecha":
+        estado_usuario[chat_id] = "codigo_cliente"
         bot.send_message(chat_id, "Ingrese el código del cliente:")
         return
 
-    if estado_usuario.get(chat_id) == "esperando_codigo_datos":
-
-        codigo = texto
-        resultado = df[df["Cod Cliente"] == codigo]
-
-        if not resultado.empty:
-
-            direccion = resultado.iloc[0]["Direccion"]
-            coordenadas = resultado.iloc[0]["Coordenadas"]
-            geoposicion = resultado.iloc[0]["Geoposicion"]
-
-            respuesta = (
-                f"📦 Cliente: {codigo}\n\n"
-                f"📍 Dirección:\n{direccion}\n\n"
-                f"🧭 Coordenadas:\n{coordenadas}\n\n"
-                f"🗺 Geolocalización:\n{geoposicion}"
-            )
-
-            bot.send_message(chat_id, respuesta)
-
-        else:
-            bot.send_message(chat_id, "❌ Código no encontrado")
-
-        estado_usuario[chat_id] = None
-        volver_menu(chat_id)
+    if estado_usuario.get(chat_id) == "codigo_cliente":
+        datos_temporales[chat_id] = {"codigo": texto}
+        estado_usuario[chat_id] = "fecha_cliente"
+        bot.send_message(chat_id, "Ingrese la fecha (Ej: 15-01-2024):")
         return
 
-    # =========================
-    # FACTURA
-    # =========================
+    if estado_usuario.get(chat_id) == "fecha_cliente":
 
-    if texto == "📄 Factura":
-        estado_usuario[chat_id] = "esperando_numero_factura"
-        bot.send_message(chat_id, "Ingrese el número de factura:")
-        return
+        codigo = datos_temporales[chat_id]["codigo"]
+        fecha = texto
 
-    if estado_usuario.get(chat_id) == "esperando_numero_factura":
-
-        numero_factura = texto
         bot.send_message(chat_id, "🔍 Buscando factura...")
 
-        paginas = buscar_paginas_pdf(numero_factura)
+        paginas = buscar_por_cliente_fecha(codigo, fecha)
 
         if paginas:
-            archivo = crear_pdf_resultado(paginas, f"factura_{numero_factura}")
+            archivo = crear_pdf_resultado(paginas, f"factura_{codigo}_{fecha}.pdf")
 
             with open(archivo, "rb") as f:
                 bot.send_document(chat_id, f)
 
             os.remove(archivo)
         else:
-            bot.send_message(chat_id, "❌ No se encontró esa factura")
+            bot.send_message(chat_id, "❌ No se encontraron facturas con esos datos")
+
+        estado_usuario[chat_id] = None
+        datos_temporales.pop(chat_id, None)
+        volver_menu(chat_id)
+        return
+
+    # =========================
+    # FACTURA NORMAL
+    # =========================
+
+    if texto == "📄 Factura":
+        estado_usuario[chat_id] = "factura"
+        bot.send_message(chat_id, "Ingrese número de factura:")
+        return
+
+    if estado_usuario.get(chat_id) == "factura":
+
+        paginas = buscar_paginas_pdf(texto)
+
+        if paginas:
+            archivo = crear_pdf_resultado(paginas, f"factura_{texto}.pdf")
+
+            with open(archivo, "rb") as f:
+                bot.send_document(chat_id, f)
+
+            os.remove(archivo)
+        else:
+            bot.send_message(chat_id, "❌ No se encontró")
 
         estado_usuario[chat_id] = None
         volver_menu(chat_id)
         return
 
     # =========================
-    # DEFAULT
+    # DATOS CLIENTE
     # =========================
+
+    if texto == "📍 Datos del Cliente":
+        estado_usuario[chat_id] = "datos"
+        bot.send_message(chat_id, "Ingrese código del cliente:")
+        return
+
+    if estado_usuario.get(chat_id) == "datos":
+
+        resultado = df[df["Cod Cliente"] == texto]
+
+        if not resultado.empty:
+            fila = resultado.iloc[0]
+
+            bot.send_message(
+                chat_id,
+                f"📦 Cliente: {texto}\n📍 {fila['Direccion']}"
+            )
+        else:
+            bot.send_message(chat_id, "❌ No encontrado")
+
+        estado_usuario[chat_id] = None
+        volver_menu(chat_id)
+        return
 
     bot.send_message(chat_id, "Selecciona una opción:", reply_markup=menu_principal())
 
@@ -307,10 +323,9 @@ def manejar_mensaje(message):
 # =========================
 
 def run_bot():
-    bot.infinity_polling(timeout=60, long_polling_timeout=60)
+    bot.infinity_polling()
 
 Thread(target=run_bot).start()
 
 port = int(os.environ.get("PORT", 10000))
-
 app.run(host="0.0.0.0", port=port)
