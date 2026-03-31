@@ -33,7 +33,7 @@ df_estados = pd.read_excel("estados.xlsx")
 df_estados["VENDEDOR"] = df_estados["VENDEDOR"].astype(str).str.upper().str.strip()
 df_estados["ESTADO"] = df_estados["ESTADO"].astype(str).str.upper().str.strip()
 
-# 🔥 LIMPIEZA PRO DE MONTO (SOLUCION DEFINITIVA)
+# limpiar monto
 df_estados["MONTO"] = (
     df_estados["MONTO"]
     .astype(str)
@@ -42,10 +42,7 @@ df_estados["MONTO"] = (
     .str.replace(" ", "", regex=False)
 )
 
-# detectar formato europeo y convertir
 df_estados["MONTO"] = df_estados["MONTO"].str.replace(",", ".", regex=False)
-
-# convertir a número seguro
 df_estados["MONTO"] = pd.to_numeric(df_estados["MONTO"], errors="coerce").fillna(0)
 
 # =========================
@@ -55,7 +52,7 @@ df_estados["MONTO"] = pd.to_numeric(df_estados["MONTO"], errors="coerce").fillna
 estado_usuario = {}
 datos_temporales = {}
 
-CLAVE = "123456"
+CLAVE = "3412"
 
 # =========================
 # MENU
@@ -83,7 +80,7 @@ def volver_menu(chat_id):
 
 @app.route('/')
 def home():
-    return "Bot activo"
+    return "Bot activo - BOT PRUEBA"
 
 # =========================
 # PDF FUNCIONES
@@ -166,7 +163,7 @@ def start(message):
 
     bot.send_message(
         chat_id,
-        "Hola 👋 Bienvenido al sistema.\n\nSelecciona una opción:",
+        "🤖 BOT PRUEBA\n\nHola 👋 Bienvenido al sistema.\n\nSelecciona una opción:",
         reply_markup=menu_principal()
     )
 
@@ -211,17 +208,21 @@ def manejar_mensaje(message):
             bot.send_message(chat_id, "❌ No se encontraron resultados")
         else:
 
-            cancelado = resultado[resultado["ESTADO"] == "CANCELADO"]["MONTO"].sum()
-            pendiente = resultado[resultado["ESTADO"] == "PENDIENTE"]["MONTO"].sum()
-            total = cancelado + pendiente
+            respuesta = "📊 RESULTADOS ENCONTRADOS\n\n"
 
-            respuesta = (
-                f"📊 RESULTADO DEL CLIENTE\n\n"
-                f"👤 Nombre buscado: {texto}\n\n"
-                f"💰 Monto Cancelado: S/ {cancelado:,.2f}\n"
-                f"⏳ Monto Pendiente: S/ {pendiente:,.2f}\n"
-                f"🧾 Monto Total: S/ {total:,.2f}"
-            )
+            # 🔥 AGRUPAR POR PERSONA
+            for persona, grupo in resultado.groupby("VENDEDOR"):
+
+                cancelado = grupo[grupo["ESTADO"] == "CANCELADO"]["MONTO"].sum()
+                pendiente = grupo[grupo["ESTADO"] == "PENDIENTE"]["MONTO"].sum()
+                total = cancelado + pendiente
+
+                respuesta += (
+                    f"👤 {persona}\n"
+                    f"💰 Cancelado: S/ {cancelado:,.2f}\n"
+                    f"⏳ Pendiente: S/ {pendiente:,.2f}\n"
+                    f"🧾 Total: S/ {total:,.2f}\n\n"
+                )
 
             bot.send_message(chat_id, respuesta)
 
