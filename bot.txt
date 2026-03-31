@@ -77,7 +77,7 @@ def home():
     return "Bot activo - BOT PRUEBA"
 
 # =========================
-# 🔥 FUNCION MEJORADA
+# FUNCIONES PDF
 # =========================
 
 def normalizar_fecha(fecha):
@@ -99,17 +99,14 @@ def buscar_por_cliente_fecha(codigo, fecha):
             try:
                 doc = fitz.open(ruta)
 
-                # 🔥 leer todo el PDF (MUCHO MÁS RÁPIDO)
                 texto_total = ""
                 for page in doc:
                     texto_total += page.get_text()
 
                 texto_total = texto_total.replace("/", "-").replace(".", "-")
 
-                # 🔥 validar rápido
                 if codigo in texto_total and fecha in texto_total:
 
-                    # 🔥 ahora sí buscar páginas exactas
                     for i in range(len(doc)):
                         texto = doc[i].get_text()
                         texto = texto.replace("/", "-").replace(".", "-")
@@ -124,9 +121,6 @@ def buscar_por_cliente_fecha(codigo, fecha):
 
     return paginas
 
-# =========================
-# FACTURA NORMAL
-# =========================
 
 def buscar_paginas_pdf(numero_factura):
     paginas = []
@@ -153,9 +147,6 @@ def buscar_paginas_pdf(numero_factura):
 
     return paginas
 
-# =========================
-# CREAR PDF
-# =========================
 
 def crear_pdf_resultado(paginas, nombre):
     nuevo = fitz.open()
@@ -196,7 +187,7 @@ def manejar_mensaje(message):
     texto = message.text.strip()
 
     # =========================
-    # ESTADOS
+    # BOT PRUEBA (ESTADOS)
     # =========================
 
     if texto == "📊 Bot Prueba":
@@ -246,6 +237,65 @@ def manejar_mensaje(message):
         return
 
     # =========================
+    # DATOS DEL CLIENTE (RECUPERADO)
+    # =========================
+
+    if texto == "📍 Datos del Cliente":
+        estado_usuario[chat_id] = "datos"
+        bot.send_message(chat_id, "Ingrese el código del cliente:")
+        return
+
+    if estado_usuario.get(chat_id) == "datos":
+
+        resultado = df[df["Cod Cliente"] == texto]
+
+        if not resultado.empty:
+            fila = resultado.iloc[0]
+
+            bot.send_message(
+                chat_id,
+                f"📦 Cliente: {texto}\n\n"
+                f"📍 Dirección: {fila['Direccion']}\n"
+                f"🧭 Coordenadas: {fila['Coordenadas']}\n"
+                f"🗺 Geolocalización: {fila['Geoposicion']}"
+            )
+        else:
+            bot.send_message(chat_id, "❌ Código no encontrado")
+
+        estado_usuario[chat_id] = None
+        volver_menu(chat_id)
+        return
+
+    # =========================
+    # FACTURA NORMAL (RECUPERADO)
+    # =========================
+
+    if texto == "📄 Factura":
+        estado_usuario[chat_id] = "factura"
+        bot.send_message(chat_id, "Ingrese número de factura:")
+        return
+
+    if estado_usuario.get(chat_id) == "factura":
+
+        bot.send_message(chat_id, "🔍 Buscando factura...")
+
+        paginas = buscar_paginas_pdf(texto)
+
+        if paginas:
+            archivo = crear_pdf_resultado(paginas, f"factura_{texto}.pdf")
+
+            with open(archivo, "rb") as f:
+                bot.send_document(chat_id, f)
+
+            os.remove(archivo)
+        else:
+            bot.send_message(chat_id, "❌ No se encontró esa factura")
+
+        estado_usuario[chat_id] = None
+        volver_menu(chat_id)
+        return
+
+    # =========================
     # FACTURA CLIENTE + FECHA
     # =========================
 
@@ -265,7 +315,7 @@ def manejar_mensaje(message):
         codigo = datos_temporales[chat_id]["codigo"]
         fecha = texto
 
-        bot.send_message(chat_id, "🔍 Buscando factura... (puede tardar unos segundos)")
+        bot.send_message(chat_id, "🔍 Buscando factura...")
 
         paginas = buscar_por_cliente_fecha(codigo, fecha)
 
